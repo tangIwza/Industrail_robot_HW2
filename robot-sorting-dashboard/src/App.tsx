@@ -110,7 +110,7 @@ const FRUIT_SPECS: Record<
     code: '1',
     color: 'Yellow',
     key: 'yellow',
-    fruit_type: 'Good sweet Orange',
+    fruit_type: 'Good Sour Orange',
     wait_ms: 1000,
     wp1: 'P3',
     wp2: 'P2',
@@ -136,7 +136,7 @@ const FRUIT_SPECS: Record<
     code: '3',
     color: 'Green',
     key: 'green',
-    fruit_type: 'Good Sour Orange',
+    fruit_type: 'Good sweet Orange',
     wait_ms: 1000,
     wp1: 'P2',
     wp2: 'P3',
@@ -630,8 +630,8 @@ export default function App() {
   const fruitShareData = useMemo(() => {
     return [
       { name: 'Apple (แดง)', key: 'red', value: counts.red, color: '#ef4444' },
-      { name: 'ส้มเปรี้ยว (เขียว)', key: 'green', value: counts.green, color: '#10b981' },
-      { name: 'ส้มหวาน (เหลือง)', key: 'yellow', value: counts.yellow, color: '#f59e0b' },
+      { name: 'ส้มหวาน (เขียว)', key: 'green', value: counts.green, color: '#10b981' },
+      { name: 'ส้มเปรี้ยว (เหลือง)', key: 'yellow', value: counts.yellow, color: '#f59e0b' },
       { name: 'ส้มเสีย (น้ำเงิน)', key: 'blue', value: counts.blue, color: '#3b82f6' },
     ];
   }, [counts]);
@@ -1221,14 +1221,14 @@ export default function App() {
                           <span className="text-[10px] text-red-700 font-normal">Wait 2s → P4 → P5</span>
                         </button>
 
-                        {/* Green: Good Sour Orange */}
+                        {/* Green: Good Sweet Orange */}
                         <button
                           onClick={() => handleTriggerCondition('3')}
                           disabled={Boolean(activeTask)}
                           className="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900 font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all shadow-sm hover:shadow disabled:opacity-50"
                         >
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                          <span>ส้มเปรี้ยว (เขียว)</span>
+                          <span>ส้มหวาน (เขียว)</span>
                           <span className="text-[10px] text-emerald-700 font-normal">Wait 1s → P2 → P3</span>
                         </button>
 
@@ -1243,14 +1243,14 @@ export default function App() {
                           <span className="text-[10px] text-blue-700 font-normal">Wait 2s → P5 → P4</span>
                         </button>
 
-                        {/* Yellow: Good Sweet Orange */}
+                        {/* Yellow: Good Sour Orange */}
                         <button
                           onClick={() => handleTriggerCondition('1')}
                           disabled={Boolean(activeTask)}
                           className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100 text-amber-900 font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all shadow-sm hover:shadow disabled:opacity-50"
                         >
                           <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                          <span>ส้มหวาน (เหลือง)</span>
+                          <span>ส้มเปรี้ยว (เหลือง)</span>
                           <span className="text-[10px] text-amber-700 font-normal">Wait 1s → P3 → P2</span>
                         </button>
                       </div>
@@ -1296,10 +1296,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Green: Good Sour Orange */}
+                    {/* Green: Good Sweet Orange */}
                     <div className="bg-white p-4 rounded-xl border border-gray-100 border-l-4 border-l-emerald-500 shadow-sm flex flex-col justify-start">
                       <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider truncate">
-                        GREEN — GOOD SOUR ORANGE
+                        GREEN — GOOD SWEET ORANGE
                       </span>
                       <div className="mt-1 flex items-baseline gap-2">
                         <span className="text-3xl font-bold text-gray-900">{counts.green}</span>
@@ -1318,10 +1318,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Yellow: Good sweet Orange */}
+                    {/* Yellow: Good Sour Orange */}
                     <div className="bg-white p-4 rounded-xl border border-gray-100 border-l-4 border-l-amber-400 shadow-sm flex flex-col justify-start">
                       <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider truncate">
-                        YELLOW — GOOD SWEET ORANGE
+                        YELLOW — GOOD SOUR ORANGE
                       </span>
                       <div className="mt-1 flex items-baseline gap-2">
                         <span className="text-3xl font-bold text-gray-900">{counts.yellow}</span>
@@ -1366,9 +1366,9 @@ export default function App() {
                     >
                       <option value="ALL">All Fruit Types ({logs.length})</option>
                       <option value="RED">Red — Apple ({counts.red})</option>
-                      <option value="GREEN">Green — Good Sour Orange ({counts.green})</option>
+                      <option value="GREEN">Green — Good sweet Orange ({counts.green})</option>
                       <option value="BLUE">Blue — Bad Orange ({counts.blue})</option>
-                      <option value="YELLOW">Yellow — Good sweet Orange ({counts.yellow})</option>
+                      <option value="YELLOW">Yellow — Good Sour Orange ({counts.yellow})</option>
                     </select>
 
                     <button
@@ -1552,9 +1552,9 @@ export default function App() {
                         <BarChart
                           data={[
                             { name: 'Apple (แดง)', actual: counts.red, target: 20 },
-                            { name: 'ส้มเปรี้ยว (เขียว)', actual: counts.green, target: 20 },
+                            { name: 'ส้มหวาน (เขียว)', actual: counts.green, target: 20 },
                             { name: 'ส้มเสีย (น้ำเงิน)', actual: counts.blue, target: 10 },
-                            { name: 'ส้มหวาน (เหลือง)', actual: counts.yellow, target: 20 },
+                            { name: 'ส้มเปรี้ยว (เหลือง)', actual: counts.yellow, target: 20 },
                           ]}
                           margin={{ top: 10, right: 20, left: -10, bottom: 0 }}
                         >
@@ -1703,9 +1703,9 @@ export default function App() {
                         <BarChart
                           data={[
                             { stage: 'Apple (แดง)', motion: 2.8, wait: 2.0 },
-                            { stage: 'ส้มเปรี้ยว (เขียว)', motion: 2.8, wait: 1.0 },
+                            { stage: 'ส้มหวาน (เขียว)', motion: 2.8, wait: 1.0 },
                             { stage: 'ส้มเสีย (น้ำเงิน)', motion: 2.8, wait: 2.0 },
-                            { stage: 'ส้มหวาน (เหลือง)', motion: 2.8, wait: 1.0 },
+                            { stage: 'ส้มเปรี้ยว (เหลือง)', motion: 2.8, wait: 1.0 },
                           ]}
                           margin={{ top: 10, right: 20, left: -10, bottom: 0 }}
                         >

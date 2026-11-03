@@ -1,3 +1,4 @@
+import os
 import serial
 import time
 import threading
@@ -6,6 +7,13 @@ from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db as firebase_db
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
 
 from dobot_api import DobotApiDashboard, DobotApiMove
 
@@ -18,6 +26,13 @@ BAUD_RATE = 115200
 ROBOT_IP = "192.168.1.6"
 DASHBOARD_PORT = 29999
 MOVE_PORT = 30003
+
+FIREBASE_DB_URL = "https://hmiplc-6606a-default-rtdb.asia-southeast1.firebasedatabase.app"
+SERVICE_ACCOUNT_PATHS = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "serviceAccountKey.json"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "serviceAccountKey.json"),
+    r"c:\Users\DELL\Downloads\serviceAccountKey.json",
+]
 
 # Coordinates (X, Y, Z, R)
 INITIAL_POSE = (350.0, 0.0, 0.0, 0.0)
@@ -32,7 +47,7 @@ FRUIT_CONFIG = {
         "code": "1",
         "color": "Yellow",
         "key": "yellow",
-        "fruit_type": "Good sweet Orange",
+        "fruit_type": "Good Sour Orange",
         "wait_ms": 1000,
         "waypoints": [("P3", P3), ("P2", P2)],
         "sequence_str": "MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P3) -> MovL(P2) -> MovL(P1)",
@@ -50,7 +65,7 @@ FRUIT_CONFIG = {
         "code": "3",
         "color": "Green",
         "key": "green",
-        "fruit_type": "Good Sour Orange",
+        "fruit_type": "Good sweet Orange",
         "wait_ms": 1000,
         "waypoints": [("P2", P2), ("P3", P3)],
         "sequence_str": "MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P2) -> MovL(P3) -> MovL(P1)",
@@ -79,6 +94,13 @@ class RobotSortingController:
 
         self.robot_connected = False
         self.serial_connected = False
+        self.firebase_connected = False
+        self.fb_system_ref = None
+        self.fb_listener = None
+        self._fb_cache: Dict[str, Any] = {}
+        self.fb_conveyor: Optional[bool] = None
+        self.fb_emergency: Optional[bool] = None
+        self._last_local_sync_ts: float = 0.0
 
         # System Operating Mode: "STOPPED", "RUNNING", "EMERGENCY_STOP"
         self.system_status = "STOPPED"
@@ -100,9 +122,9 @@ class RobotSortingController:
         # Counters
         self.counts = {
             "red": 0,     # Apple
-            "green": 0,   # Good Sour Orange
+            "green": 0,   # Good sweet Orange
             "blue": 0,    # Bad Orange
-            "yellow": 0,  # Good sweet Orange
+            "yellow": 0,  # Good Sour Orange
         }
 
         # Fruit Logs & System Events
@@ -154,6 +176,105 @@ class RobotSortingController:
             self.ser = None
             self.serial_connected = False
 
+        # Connect Firebase Realtime Database
+        self.connect_firebase()
+
+    def connect_firebase(self):
+        if not FIREBASE_AVAILABLE:
+            print("firebase-admin not installed; Firebase sync disabled.")
+            self.firebase_connected = False
+            return
+
+        try:
+            key_path = next((p for p in SERVICE_ACCOUNT_PATHS if os.path.exists(p)), None)
+            if not key_path:
+                print("serviceAccountKey.json not found; Firebase sync disabled.")
+                self.firebase_connected = False
+                return
+
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(key_path)
+                firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_DB_URL})
+
+            self.fb_system_ref = firebase_db.reference("system")
+            self.firebase_connected = True
+            print(f"Connected to Firebase Realtime Database ({FIREBASE_DB_URL}) using {key_path}")
+        except Exception as e:
+            print(f"Firebase connection error: {e}")
+            self.firebase_connected = False
+
+    def _push_firebase_state(self, updates: Dict[str, Any]):
+        """Push local state changes to Firebase /system asynchronously."""
+        if not self.firebase_connected or self.fb_system_ref is None:
+            return
+
+        def _do_update():
+            try:
+                payload = dict(updates)
+                payload["updated_at"] = time.time()
+                self.fb_system_ref.update(payload)
+            except Exception as e:
+                print(f"Firebase update error: {e}")
+
+        threading.Thread(target=_do_update, daemon=True).start()
+
+    def _apply_firebase_state(self, data: Dict[str, Any]):
+        """
+        Synchronize machine state with Firebase `/system`:
+        1. `emergency`:
+           - If True  -> press Emergency Stop (`emergency_stop()`)
+           - If False (when currently in EMERGENCY_STOP) -> Resume held task (`start_machine()`)
+        2. `conveyor` (when `emergency` is False):
+           - If True  -> Start machine (`start_machine()`)
+           - If False -> Stop machine (`stop_machine()`)
+        """
+        conveyor = bool(data.get("conveyor", False))
+        emergency = bool(data.get("emergency", False))
+
+        with self.lock:
+            current_status = self.system_status
+            prev_emergency = self.fb_emergency
+            self.fb_conveyor = conveyor
+            self.fb_emergency = emergency
+
+        # 1. Emergency state control
+        if emergency:
+            if current_status != "EMERGENCY_STOP":
+                print("[Firebase] emergency=True -> Activating Emergency Stop")
+                self.emergency_stop(from_firebase=True)
+            return
+
+        # If emergency changed from True -> False (or machine is currently in EMERGENCY_STOP while emergency=False)
+        if current_status == "EMERGENCY_STOP" or (prev_emergency is True and not emergency):
+            print("[Firebase] emergency=False -> Resuming Held Task (Start Machine)")
+            self.start_machine(from_firebase=True)
+            if not conveyor:
+                with self.lock:
+                    self.fb_conveyor = True
+                self._push_firebase_state({"conveyor": True, "running": True})
+            return
+
+        # 2. Conveyor state control (True = Start Machine, False = Stop Machine)
+        if conveyor and current_status != "RUNNING":
+            print("[Firebase] conveyor=True -> Starting Machine")
+            self.start_machine(from_firebase=True)
+        elif (not conveyor) and current_status != "STOPPED":
+            print("[Firebase] conveyor=False -> Stopping Machine")
+            self.stop_machine(from_firebase=True)
+
+    def firebase_sync_loop(self):
+        """Background daemon loop to keep machine state synchronized with Firebase /system."""
+        while not self._stop_threads:
+            if self.firebase_connected and self.fb_system_ref is not None:
+                if (time.time() - self._last_local_sync_ts) >= 0.8:
+                    try:
+                        data = self.fb_system_ref.get()
+                        if isinstance(data, dict):
+                            self._apply_firebase_state(data)
+                    except Exception as e:
+                        print(f"Firebase poll error: {e}")
+            time.sleep(0.3)
+
     def _update_state_lights(self):
         """
         Update Tower/Signal Lights based on system_status:
@@ -182,7 +303,7 @@ class RobotSortingController:
             except Exception as e:
                 print(f"Error updating state lights (DO3/DO4/DO5): {e}")
 
-    def start_machine(self):
+    def start_machine(self, from_firebase: bool = False):
         with self.lock:
             if self.system_status == "EMERGENCY_STOP":
                 # Restore DO(2) state if it was ON when Emergency Stop was pressed
@@ -211,6 +332,13 @@ class RobotSortingController:
                             break
                 else:
                     self.machine_state = "RUNNING - Waiting for Sensor Signal"
+
+                if not from_firebase:
+                    self._last_local_sync_ts = time.time()
+                    self.fb_conveyor = True
+                    self.fb_emergency = False
+                    self._push_firebase_state({"conveyor": True, "emergency": False, "running": True})
+
                 return {
                     "status": "resumed",
                     "machine_state": self.machine_state,
@@ -231,6 +359,13 @@ class RobotSortingController:
             self._update_state_lights()
             if not self.active_task:
                 self.machine_state = "RUNNING - Waiting for Sensor Signal"
+
+            if not from_firebase:
+                self._last_local_sync_ts = time.time()
+                self.fb_conveyor = True
+                self.fb_emergency = False
+                self._push_firebase_state({"conveyor": True, "emergency": False, "running": True})
+
             return {
                 "status": "started",
                 "machine_state": self.machine_state,
@@ -239,7 +374,7 @@ class RobotSortingController:
                 "do5_status": self.do5_status,
             }
 
-    def stop_machine(self):
+    def stop_machine(self, from_firebase: bool = False):
         with self.lock:
             self.system_status = "STOPPED"
             self.pending_code = None
@@ -256,6 +391,13 @@ class RobotSortingController:
                 self.machine_state = f"STOPPING (Finishing {self.active_task['fruit_type']}...) - DO(2, OFF)"
             else:
                 self.machine_state = "STOPPED (Standby) - DO(2, OFF)"
+
+            if not from_firebase:
+                self._last_local_sync_ts = time.time()
+                self.fb_conveyor = False
+                self.fb_emergency = False
+                self._push_firebase_state({"conveyor": False, "emergency": False, "running": False})
+
             return {
                 "status": "stopped",
                 "machine_state": self.machine_state,
@@ -265,7 +407,7 @@ class RobotSortingController:
                 "do5_status": self.do5_status,
             }
 
-    def emergency_stop(self):
+    def emergency_stop(self, from_firebase: bool = False):
         with self.lock:
             if self.system_status != "EMERGENCY_STOP":
                 self.last_state_before_estop = self.machine_state
@@ -301,6 +443,11 @@ class RobotSortingController:
             else:
                 self.machine_state = f"EMERGENCY STOP - Holding State ({self.last_state_before_estop}) (DO2 OFF)"
 
+            if not from_firebase:
+                self._last_local_sync_ts = time.time()
+                self.fb_emergency = True
+                self._push_firebase_state({"emergency": True, "running": False})
+
             return {
                 "status": "emergency_stop",
                 "machine_state": self.machine_state,
@@ -331,6 +478,10 @@ class RobotSortingController:
                 # Auto start when manually triggered from dashboard
                 self.system_status = "RUNNING"
                 self._update_state_lights()
+                self._last_local_sync_ts = time.time()
+                self.fb_conveyor = True
+                self.fb_emergency = False
+                self._push_firebase_state({"conveyor": True, "emergency": False, "running": True})
             if self.active_task is not None or self.pending_code is not None:
                 raise ValueError("Robot is currently busy finishing the active condition.")
             if code not in ("0", "1", "2", "3", "4"):
@@ -660,6 +811,7 @@ class RobotSortingController:
             f"[Sensor] Confirmed Color after {len(samples)} readings ({' -> '.join(samples)}): "
             f"Code {final_code} ({FRUIT_CONFIG[final_code]['color']} - {FRUIT_CONFIG[final_code]['fruit_type']})"
         )
+        self._push_firebase_state({"color_sensor": int(final_code)})
         return final_code
 
     def worker_loop(self):
@@ -710,6 +862,9 @@ class RobotSortingController:
                 "last_state_before_estop": self.last_state_before_estop,
                 "robot_connected": self.robot_connected,
                 "serial_connected": self.serial_connected,
+                "firebase_connected": self.firebase_connected,
+                "fb_conveyor": self.fb_conveyor,
+                "fb_emergency": self.fb_emergency,
                 "serial_port": PORT,
                 "robot_ip": ROBOT_IP,
                 "do2_status": self.do2_status,
@@ -758,6 +913,8 @@ def on_startup():
     controller.connect_hardware()
     t = threading.Thread(target=controller.worker_loop, daemon=True)
     t.start()
+    fb_t = threading.Thread(target=controller.firebase_sync_loop, daemon=True)
+    fb_t.start()
 
 
 @app.get("/api/status")

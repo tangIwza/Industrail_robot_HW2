@@ -8,9 +8,9 @@ An automated industrial fruit sorting and classification system combining a **Do
 
 - **Automated Fruit Sorting Sequences**:
   - **Apple (Red)**: `MovL(P1) -> DO(2,ON) -> Wait(2000) -> DO(2,OFF) -> MovL(P4) -> MovL(P5) -> MovL(P1)`
-  - **Good Sour Orange (Green)**: `MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P2) -> MovL(P3) -> MovL(P1)`
+  - **Good Sweet Orange (Green)**: `MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P2) -> MovL(P3) -> MovL(P1)`
   - **Bad Orange (Blue)**: `MovL(P1) -> DO(2,ON) -> Wait(2000) -> DO(2,OFF) -> MovL(P5) -> MovL(P4) -> MovL(P1)`
-  - **Good Sweet Orange (Yellow)**: `MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P3) -> MovL(P2) -> MovL(P1)`
+  - **Good Sour Orange (Yellow)**: `MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P3) -> MovL(P2) -> MovL(P1)`
 - **Color Sensor Triple-Verification**:
   - Automatically samples 2 additional consecutive readings after first detection to prevent false sorting caused by fruit edges.
 - **Hardware State Tower Lights**:

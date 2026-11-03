@@ -47,7 +47,7 @@ FRUIT_CONFIG = {
         "code": "1",
         "color": "Yellow",
         "key": "yellow",
-        "fruit_type": "Good sweet Orange",
+        "fruit_type": "Good Sour Orange",
         "wait_ms": 1000,
         "waypoints": [("P3", P3), ("P2", P2)],
         "sequence_str": "MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P3) -> MovL(P2) -> MovL(P1)",
@@ -65,7 +65,7 @@ FRUIT_CONFIG = {
         "code": "3",
         "color": "Green",
         "key": "green",
-        "fruit_type": "Good Sour Orange",
+        "fruit_type": "Good sweet Orange",
         "wait_ms": 1000,
         "waypoints": [("P2", P2), ("P3", P3)],
         "sequence_str": "MovL(P1) -> DO(2,ON) -> Wait(1000) -> DO(2,OFF) -> MovL(P2) -> MovL(P3) -> MovL(P1)",
@@ -122,9 +122,9 @@ class RobotSortingController:
         # Counters
         self.counts = {
             "red": 0,     # Apple
-            "green": 0,   # Good Sour Orange
+            "green": 0,   # Good sweet Orange
             "blue": 0,    # Bad Orange
-            "yellow": 0,  # Good sweet Orange
+            "yellow": 0,  # Good Sour Orange
         }
 
         # Fruit Logs & System Events
